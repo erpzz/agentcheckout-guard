@@ -19,8 +19,10 @@ and never offers a production payment endpoint.
   model result is claimed by those tests.
 - Configure a legitimate free sandbox merchant app and test buyer, then record
   create, buyer approval and validated capture without exposing credentials.
-- Connect an actual local model and show a real advisory response; retain the
-  independent human approval boundary.
+- Actual local CPU SmolLM2 inference was independently verified through the
+  adapter and AgentCheckout HTTP path in about one second. Advice is weak and
+  sometimes truncated; it is never authorization. Judges can reproduce the
+  optional pinned runtime using `local-advisor/README.md`.
 - Record and upload a public YouTube demonstration under three minutes. A local
   review-only recording is preparation, not a complete contest demonstration.
 - Actual eligible entrant must sign in and address contest terms, including

@@ -14,6 +14,13 @@ python3 agentcheckout.py --port 8766
 
 Open http://127.0.0.1:8766 . Submit a request, see risk classification, approve/reject. The **PayPal checkout** action will be unavailable until authorized sandbox credentials are supplied, by design. Set `OLLAMA_MODEL=qwen3:4b` or another **already installed** local Ollama model if desired: it invokes only `http://127.0.0.1:11434/api/generate` and transparently falls back to rules-only mode when unavailable. AI advice NEVER approves or charges anything.
 
+An optional [local CPU Transformers.js advisor](local-advisor/README.md) now
+provides genuine small-model inference without Ollama, paid APIs or GPU
+resources. Its fixed Apache-2.0 model and source revision are pinned. This
+path was exercised through the real Python HTTP assessor and remains
+advisory-only; output quality is limited and independent reviewer approval
+is still required. Authenticated PayPal sandbox testing remains outstanding.
+
 On first start, a private `agentcheckout.db.reviewer.key` file is created with
 owner-only permissions. The reviewer reads that file privately and enters its
 value into the password input to authorize approval, rejection, checkout and
@@ -67,6 +74,6 @@ Tests cover input validation, distinct approval/capture transitions, threaded du
 
 ## Competition submission gap
 
-Target: https://paypalaihackathon.devpost.com/rules (deadline November 12, 2026). The official competition requires PayPal integration, functional demo, a public open-source repository, and an under-three-minute public YouTube demo video, with entry through the eligible entrant's real Devpost account. **This standalone source is NOT an official entry.** No authenticated PayPal sandbox call has been run yet; no contest video or submission is claimed. Human eligibility and binding contest terms must be handled by the actual entrant. The local rules-only workflow and synthetic transport tests do not establish third-party sandbox or model validation.
+Target: https://paypalaihackathon.devpost.com/rules (deadline November 12, 2026). The official competition requires PayPal integration, functional demo, a public open-source repository, and an under-three-minute public YouTube demo video, with entry through the eligible entrant's real Devpost account. **This standalone source is NOT an official entry.** Genuine local CPU model inference was independently verified separately from the deterministic tests. No authenticated PayPal sandbox call, submitted YouTube video, award or receipt is claimed. Human eligibility and binding contest terms must be handled by the actual entrant.
 
 Copyright (c) 2026 Potential project contributors. MIT License.

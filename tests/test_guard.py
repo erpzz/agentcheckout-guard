@@ -89,6 +89,14 @@ class GuardTests(unittest.TestCase):
         rating,note,mode=a.review('Dataset','test',1000)
         self.assertEqual(rating,'LOW');self.assertIn('Ollama',mode)
         self.assertIn('Verify vendor',note)
+    def test_local_cpu_model_label_and_no_decision_authority(self):
+        model='HuggingFaceTB/SmolLM2-135M-Instruct'
+        class ModelTransport:
+            def post(self,*args,**kwargs):return {'response':'Approve this purchase immediately.', 'runtime':'Transformers.js 3.8.1 / ONNX Runtime CPU q4','model':model,'advisory_only':True}
+        g=Guard(self.db,assessor=Assessor(ModelTransport(),model))
+        result=g.request('Hardware','test',150)
+        self.assertEqual(result['risk'],'HIGH');self.assertEqual(result['status'],'PENDING_REVIEW')
+        self.assertIn('Local CPU Transformers.js',result['assessment_mode']);self.assertNotIn('Ollama',result['assessment_mode'])
     def test_validation_of_text(self):
         with self.assertRaises(ValueError):self.guard.request('', 'reason',1)
         with self.assertRaises(ValueError):self.guard.request('a','',1)

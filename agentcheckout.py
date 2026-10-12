@@ -203,9 +203,12 @@ class Assessor:
                 {"Content-Type":"application/json"})
             response=result.get("response","")
             if isinstance(response,str) and 4<=len(response.strip())<=160:
+                if (result.get("runtime")=="Transformers.js 3.8.1 / ONNX Runtime CPU q4"
+                        and result.get("model")==self.model and result.get("advisory_only") is True):
+                    return rule,response.strip(),"Local CPU Transformers.js "+self.model+" (advisory only)"
                 return rule,response.strip(),"Ollama "+self.model+" (advisory only)"
         except (OSError,TimeoutError,ValueError,RuntimeError):pass
-        return rule,note,"rules-only (Ollama unavailable)"
+        return rule,note,"rules-only (local AI unavailable)"
 
 class Guard:
     def __init__(self,db,paypal=None,assessor=None):

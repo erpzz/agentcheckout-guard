@@ -1,0 +1,8 @@
+{
+  "name": "agentcheckout-local-advisor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test advisor.test.mjs", "demo": "node advisor.mjs --demo", "start": "node advisor.mjs"},
+  "dependencies": {"@huggingface/transformers": "3.8.1"}
+}

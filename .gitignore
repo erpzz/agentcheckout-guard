@@ -5,3 +5,5 @@ __pycache__/
 *.reviewer.key
 *.db-*
 *.sqlite3-*
+node_modules/
+.cache/
