@@ -21,6 +21,25 @@ physical Alexa+ device or Amazon's partner-only console. A simulated Alexa+
 client can call `tools/list`, submit a purchase proposal, and then show the
 pending request in the existing reviewer UI.
 
+With the app running, the MCP Inspector CLI can reproduce that flow without
+installing a Python package or configuring PayPal:
+
+```bash
+npx --yes @modelcontextprotocol/inspector --cli \
+  --server-url http://127.0.0.1:8766/mcp --transport http \
+  --method tools/list --json
+
+npx --yes @modelcontextprotocol/inspector --cli \
+  --server-url http://127.0.0.1:8766/mcp --transport http \
+  --method tools/call --tool-name propose_purchase \
+  --tool-arg item="USB-C test fixture" \
+  --tool-arg justification="Verify gated purchase flow" \
+  --tool-arg amount=3.25 --json
+```
+
+The second command creates only a local pending request. The browser UI at the
+root URL will show it for reviewer decisions.
+
 ## Run without credentials or spending
 
 Requires Python 3.11+. No pip install, database service, API key, hosting, or cloud spend needed for the local review demo.
