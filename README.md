@@ -1,8 +1,44 @@
-# AgentCheckout Guard — v0.2 sandbox-only approval boundary
+# AgentCheckout Guard — v0.3 MCP requests with a sandbox-only approval boundary
 
 **Status: functioning local proof of concept; NOT a hackathon submission or prize.** Built by an AI agent during PayPal AI Hackathon's 2026 entry period. There is no live-payment capability.
 
 An AI agent can ask for an item, describe why it wants it, and get an automated **advisory-only** risk review from a local Ollama model. A human reviewer must explicitly approve the request. Only then can a server-side process create a PayPal **sandbox** checkout order; the buyer must independently approve payment in PayPal's **sandbox**; capture is a separate explicit action. No automatic agent financial execution is possible.
+
+## Alexa+ / MCP integration proof
+
+The v0.3 local server also exposes a stateless MCP Streamable HTTP endpoint at
+`http://127.0.0.1:8766/mcp`. It provides two tools: `propose_purchase` creates a
+request that remains `PENDING_REVIEW`, and `list_purchase_requests` reads the
+request queue. There is deliberately no MCP tool to approve a request, create a
+PayPal order, or capture a payment. Those operations remain in the separate
+reviewer-authenticated browser UI. The MCP route is loopback-only and validates
+Host and Origin to resist remote access and DNS-rebinding attempts.
+
+Start the app using the command below, then configure a local MCP client with
+the endpoint above. The implementation supports stateless JSON responses and
+MCP protocol versions through `2025-11-25`; it does not claim a connection to a
+physical Alexa+ device or Amazon's partner-only console. A simulated Alexa+
+client can call `tools/list`, submit a purchase proposal, and then show the
+pending request in the existing reviewer UI.
+
+With the app running, the MCP Inspector CLI can reproduce that flow without
+installing a Python package or configuring PayPal:
+
+```bash
+npx --yes @modelcontextprotocol/inspector --cli \
+  --server-url http://127.0.0.1:8766/mcp --transport http \
+  --method tools/list --json
+
+npx --yes @modelcontextprotocol/inspector --cli \
+  --server-url http://127.0.0.1:8766/mcp --transport http \
+  --method tools/call --tool-name propose_purchase \
+  --tool-arg item="USB-C test fixture" \
+  --tool-arg justification="Verify gated purchase flow" \
+  --tool-arg amount=3.25 --json
+```
+
+The second command creates only a local pending request. The browser UI at the
+root URL will show it for reviewer decisions.
 
 ## Run without credentials or spending
 
@@ -74,6 +110,6 @@ Tests cover input validation, distinct approval/capture transitions, threaded du
 
 ## Competition submission gap
 
-Target: https://paypalaihackathon.devpost.com/rules (deadline November 12, 2026). The official competition requires PayPal integration, functional demo, a public open-source repository, and an under-three-minute public YouTube demo video, with entry through the eligible entrant's real Devpost account. **This standalone source is NOT an official entry.** Genuine local CPU model inference was independently verified separately from the deterministic tests. No authenticated PayPal sandbox call, submitted YouTube video, award or receipt is claimed. Human eligibility and binding contest terms must be handled by the actual entrant.
+Targets include the [PayPal AI Hackathon](https://paypalaihackathon.devpost.com/rules) (deadline November 12, 2026) and [Build, Ship, Shape: Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/rules) (deadline October 23, 2026). The latter's Alexa+ track accepts a self-hosted MCP server or simulated experience. This source update is not an official entry in either contest. No authenticated PayPal sandbox call, real Alexa+ device integration, submitted demo video, award or receipt is claimed. Human eligibility, account entry and binding contest terms must be handled by the actual entrant.
 
 Copyright (c) 2026 Potential project contributors. MIT License.
