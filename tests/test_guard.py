@@ -243,8 +243,10 @@ class GuardTests(unittest.TestCase):
         from http.server import BaseHTTPRequestHandler
         class ResponseHandler(BaseHTTPRequestHandler):
             def do_POST(self):
-                self.send_response(200);self.end_headers()
-                self.wfile.write(b'[]' if self.path=='/list' else b' '* (1024*1024+1))
+                self.rfile.read(int(self.headers.get('Content-Length', '0')))
+                body=b'[]' if self.path=='/list' else b' '* (1024*1024+1)
+                self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers()
+                self.wfile.write(body)
             def log_message(self,*args):pass
         server=ThreadingHTTPServer(('127.0.0.1',0),ResponseHandler)
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
