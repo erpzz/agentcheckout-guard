@@ -21,6 +21,7 @@ MAX_CENTS=50000
 ALLOWED_HOST="https://api-m.sandbox.paypal.com"
 MODEL_HOST="http://127.0.0.1:11434"
 RETRY_WINDOW_SECONDS=5*60*60  # Below PayPal's default six-hour request-id retention.
+MCP_PROTOCOL_VERSIONS={"2025-11-25","2025-06-18","2025-03-26","2024-11-05"}
 
 def approval_url(link,order_id):
     if not isinstance(link,str) or any(ord(c)<33 for c in link):
@@ -261,6 +262,8 @@ class AppHandler(BaseHTTPRequestHandler):
         self.end_headers();self.wfile.write(data)
     def do_GET(self):
         if not self._valid_host():return self._send(403,{"error":"Invalid local Host"})
+        if self.path=="/mcp":
+            self.send_response(405);self.send_header("Allow","POST");self.send_header("Content-Length","0");self.end_headers();return
         if self.path=="/":return self._send(200,(self.root/"index.html").read_bytes(),"text/html; charset=utf-8")
         if self.path=="/app.js":return self._send(200,(self.root/"app.js").read_bytes(),"application/javascript; charset=utf-8")
         if self.path=="/styles.css":return self._send(200,(self.root/"styles.css").read_bytes(),"text/css; charset=utf-8")
@@ -271,6 +274,7 @@ class AppHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             if not self._valid_host():return self._send(403,{"error":"Invalid local Host"})
+            if self.path=="/mcp":return self._mcp_post()
             if not self.token or not secrets.compare_digest(self.headers.get("X-CSRF-Token",""),self.token) or self.headers.get("Origin") not in (None,"http://"+self.headers.get("Host")):
                 return self._send(403,{"error":"Invalid origin or CSRF token"})
             if self.path in ("/api/decide","/api/checkout","/api/capture"):
@@ -291,6 +295,91 @@ class AppHandler(BaseHTTPRequestHandler):
             return self._send(400,{"error":str(e)})
         except (RuntimeError,OSError):
             return self._send(503,{"error":"Sandbox service unavailable or payment not yet approved"})
+
+    def _mcp_post(self):
+        """Stateless Streamable HTTP MCP surface: propose and inspect, never approve."""
+        origin=self.headers.get("Origin")
+        if origin not in (None,"http://"+self.headers.get("Host")):
+            return self._send(403,{"error":"Invalid local Origin"})
+        accept={part.split(";",1)[0].strip().lower() for part in
+                self.headers.get("Accept","").split(",")}
+        if not {"application/json","text/event-stream"}.issubset(accept):
+            return self._send(406,{"error":"Accept must include application/json and text/event-stream"})
+        if self.headers.get_content_type()!="application/json":
+            return self._send(415,{"error":"application/json required"})
+        try:n=int(self.headers.get("Content-Length","0"))
+        except ValueError:n=0
+        if n<1 or n>10000:return self._send(400,{"error":"Invalid request body size"})
+        try:body=json.loads(self.rfile.read(n))
+        except (UnicodeDecodeError,json.JSONDecodeError):
+            return self._mcp_json({"jsonrpc":"2.0","id":None,"error":{"code":-32700,"message":"Parse error"}})
+        if not isinstance(body,dict) or body.get("jsonrpc")!="2.0" or not isinstance(body.get("method"),str):
+            return self._mcp_json({"jsonrpc":"2.0","id":body.get("id") if isinstance(body,dict) else None,
+                                   "error":{"code":-32600,"message":"Invalid Request"}})
+        request_id=body.get("id")
+        if request_id is None:
+            # MCP notifications have no response body.
+            self.send_response(202);self.send_header("Content-Length","0");self.end_headers();return
+        method=body["method"]
+        params=body.get("params") or {}
+        if not isinstance(params,dict):
+            return self._mcp_json({"jsonrpc":"2.0","id":request_id,
+                                   "error":{"code":-32602,"message":"params must be an object"}})
+        if method!="initialize" and self.headers.get("MCP-Protocol-Version") not in MCP_PROTOCOL_VERSIONS:
+            return self._send(400,{"error":"A supported MCP-Protocol-Version header is required"})
+        try:
+            if method=="initialize":
+                requested=params.get("protocolVersion")
+                version=requested if requested in MCP_PROTOCOL_VERSIONS else "2025-11-25"
+                result={"protocolVersion":version,"capabilities":{"tools":{"listChanged":False}},
+                        "serverInfo":{"name":"agentcheckout-guard","version":"0.3.0"},
+                        "instructions":"Draft and inspect purchase requests. Every request stays pending until a separate reviewer approves it in AgentCheckout Guard. This MCP server cannot approve, create checkout, or capture payment."}
+            elif method=="ping":result={}
+            elif method=="tools/list":result={"tools":self._mcp_tools()}
+            elif method=="tools/call":result=self._mcp_call(params)
+            else:
+                return self._mcp_json({"jsonrpc":"2.0","id":request_id,
+                                       "error":{"code":-32601,"message":"Method not found"}})
+            return self._mcp_json({"jsonrpc":"2.0","id":request_id,"result":result})
+        except (ValueError,KeyError,TypeError) as error:
+            if method=="tools/call":
+                result={"content":[{"type":"text","text":str(error)}],"isError":True}
+                return self._mcp_json({"jsonrpc":"2.0","id":request_id,"result":result})
+            return self._mcp_json({"jsonrpc":"2.0","id":request_id,
+                                   "error":{"code":-32602,"message":str(error)}})
+
+    @staticmethod
+    def _mcp_tools():
+        return [
+            {"name":"propose_purchase","description":"Create a purchase proposal for independent human review. This never approves or charges.",
+             "inputSchema":{"type":"object","properties":{"item":{"type":"string","minLength":1,"maxLength":200},
+                 "justification":{"type":"string","minLength":1,"maxLength":500},
+                 "amount":{"type":"number","minimum":0.01,"maximum":500}},
+                 "required":["item","justification","amount"],"additionalProperties":False}},
+            {"name":"list_purchase_requests","description":"Inspect recent purchase proposals and review status. No approval or payment action is available.",
+             "inputSchema":{"type":"object","properties":{},"additionalProperties":False}}
+        ]
+
+    def _mcp_call(self,params):
+        if not isinstance(params,dict):raise ValueError("Tool parameters must be an object")
+        name=params.get("name");args=params.get("arguments") or {}
+        if not isinstance(args,dict):raise ValueError("Tool arguments must be an object")
+        if name=="propose_purchase":
+            if set(args)!={"item","justification","amount"}:
+                raise ValueError("Provide only item, justification, and amount")
+            if not isinstance(args["amount"],(int,float)) or isinstance(args["amount"],bool):
+                raise ValueError("amount must be a number")
+            request=self.guard.request(args["item"],args["justification"],args["amount"],"alexa_plus_mcp")
+            data={k:request[k] for k in ("id","created","item","justification","cents","risk","risk_note","assessment_mode","status")}
+        elif name=="list_purchase_requests":
+            if args:raise ValueError("This tool takes no arguments")
+            data=[{k:item[k] for k in ("id","created","item","justification","cents","risk","risk_note","assessment_mode","status")}
+                  for item in self.guard.db.all()]
+        else:raise ValueError("Unknown tool")
+        return {"content":[{"type":"text","text":json.dumps(data,sort_keys=True)}],"structuredContent":{"data":data},"isError":False}
+
+    def _mcp_json(self,payload):
+        return self._send(200,payload)
     def log_message(self,*args):pass
     def _valid_host(self):
         hosts=self.headers.get_all("Host",[])
